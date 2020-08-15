@@ -1,12 +1,4 @@
 /**
- * To check the compression on a rotary engine, we want to know the chamber's
- * pressure for each of the rotor's 3 faces. As a rotor face passes the sensor,
- * we'll expect an upper pressure peak; this is the value we want to record. As
- * it continues, we should see a lower peak between the faces, indicating that
- * we've moved on to the next face, and need to repeat the measurement.
- */
-
-/**
  * The number of physical rotor faces; this will likely be 3 unless you're doing
  * something really neat and interesting
  */
@@ -15,7 +7,7 @@
 /** The pin for our pressure transducer */
 const int SENSOR_PIN = A7;
 /** Hysteresis used in our peak detectors, as an ADC unit; 27 = ~5 PSI  */
-const int HYSTERESIS = 27; //corresponds to ~5 PSI
+const int HYSTERESIS = 27;
 
 /** The input (domain) of the sensor, in PSI */
 const float SENSOR_PSI_MAX = 150.0;
@@ -31,16 +23,18 @@ const int CALIBRATION_COUNT = 10;
 /** The delay, in ms, between calibration reads */
 const int CALIBRATION_DELAY = 100; // ms
 /**
- * The average sensor value measured during calibration;
- * this should correspond to 0 PSI
+ * The average sensor value measured during calibration; this should correspond
+ * to 0 PSI
  */
 int CALIBRATION_VALUE = 0;
 
 /**
  * Convert an ADC value to human friendly PSI
  *
- * This calculation is a bit involved, as the sensor's input PSI domain and
- * output voltage range must be accounted for;
+ * We treat the CALIBRATION_VALUE measured at startup as 0 PSI, so start by
+ * offsetting the measured value. We also know the volts per adc unit, and from
+ * the sensor specs can determine the volts per psi. Using these values, we can
+ * convert our ADC value to PSI.
  */
 float convertToPSI(int value)
 {
@@ -56,8 +50,8 @@ float convertToPSI(int value)
  * The avg time to perform a full rotation is the average peak to peak duration
  * multiplied by the number of rotor faces.
  *
- * This avoids the problem of RPM calculations being off
- * due to any down time between engine cranking.
+ * This avoids the problem of RPM calculations being off due to any down time
+ * between engine cranking.
  */
 unsigned long calculateRotorRotationDuration(unsigned long peakTimes[ROTOR_FACES])
 {
@@ -78,11 +72,9 @@ unsigned long calculateRotorRotationDuration(unsigned long peakTimes[ROTOR_FACES
  * rotation of the rotor. Thus if we know the duration of a single rotor
  * rotation, we can calculate the engine RPM.
  *
- * Unit analysis:
- *  a = (duration) ms / rotor_rotation
- *  b = (1000 * 60) ms / minute
- *  c = (3) output_rotations / rotor_rotation
- *  rpm = (c * b / a) output_rotations / minute
+ * Unit analysis: a = (duration) ms / rotor_rotation b = (1000 * 60) ms / minute
+ *  c = (3) output_rotations / rotor_rotation rpm = (c * b / a) output_rotations
+ *  / minute
  */
 float calculateRPM(unsigned long duration)
 {
@@ -102,15 +94,22 @@ void setup()
     delay(CALIBRATION_DELAY);
     const int v = analogRead(SENSOR_PIN);
     Serial.print(v);
-    Serial.print(", ");
+    Serial.print(F(", "));
     CALIBRATION_VALUE += v;
   }
-  Serial.print("AVG: ");
+  Serial.print(F("AVG: "));
   CALIBRATION_VALUE /= CALIBRATION_COUNT;
   Serial.println(CALIBRATION_VALUE);
   Serial.println(F("Calibration complete, commence cranking"));
 }
 
+/**
+ * To check the compression on a rotary engine, we want to know the chamber's
+ * pressure for each of the rotor's 3 faces. As a rotor face passes the sensor,
+ * we'll expect an upper pressure peak; this is the value we want to record. As
+ * it continues, we should see a lower peak between the faces, indicating that
+ * we've moved on to the next face, and need to repeat the measurement.
+ */
 void loop()
 {
   /**
@@ -137,7 +136,8 @@ void loop()
   {
     // Initial sensor read
     v = analogRead(SENSOR_PIN);
-    // Upper peak detector
+    // Upper peak detector; here we detect the max pressure the rotor face can
+    // hold
     while (v >= facePeaks[i] - HYSTERESIS)
     {
       if (v > facePeaks[i])
@@ -150,7 +150,8 @@ void loop()
 
     // Initialize our minimum at the last max
     int minimum = facePeaks[i];
-    // Lower peak detector
+    // Lower peak detector; here we detect the transition between two rotor
+    // faces, so we may move on to the next iteration of the loop.
     while (v <= minimum + HYSTERESIS)
     {
       if (v < minimum)
